@@ -20,8 +20,8 @@ const jupListFrom = (d) => { var _a, _b, _c; return (Array.isArray(d) ? d : (_c 
 const dexListFrom = (d) => { var _a, _b; return (Array.isArray(d) ? d : (_b = (_a = d === null || d === void 0 ? void 0 : d.pairs) !== null && _a !== void 0 ? _a : d === null || d === void 0 ? void 0 : d.results) !== null && _b !== void 0 ? _b : []); };
 const currentCoin = "pepe";
 function fetchAllJupPages(query) {
+    var _a;
     return __awaiter(this, void 0, void 0, function* () {
-        var _a;
         let url = `https://lite-api.jup.ag/tokens/v2/search?query=${encodeURIComponent(query)}`;
         const all = [];
         while (url) {
