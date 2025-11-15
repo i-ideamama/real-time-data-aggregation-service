@@ -2,10 +2,11 @@ import express, { Request, Response } from "express";
 import http from "http";
 import { Server as IOServer } from "socket.io";
 import Redis from "ioredis";
-import axios from "axnpios";
+import axios from "axios";
 import path from "path";
 
-const app: Express = express();
+const port=8000;
+const app= express();
 
 app.get("/", (req: Request, res: Response) => {
   res.send("hihihi");
