@@ -1,0 +1,5 @@
+###Check the given APIs:
+GET https://lite-api.jup.ag/tokens/v2/search?query=SOL
+
+###Check the given APIs:
+GET https://lite-api.jup.ag/tokens/v2/search?query=SOL
