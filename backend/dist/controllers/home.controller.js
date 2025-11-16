@@ -14,14 +14,18 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.checkAPI = void 0;
 const axios_1 = __importDefault(require("axios"));
+const redis_1 = require("redis");
+const redisClient = (0, redis_1.createClient)();
+redisClient.on("error", (err) => console.error("Redis Client Error", err));
+const DEFAULT_EXPIRATION = 60;
 const toNum = (v) => (v == null ? null : Number(String(v).replace("%", "")) || null);
 const lc = (s) => (s ? s.toLowerCase() : null);
 const jupListFrom = (d) => { var _a, _b, _c; return (Array.isArray(d) ? d : (_c = (_b = (_a = d === null || d === void 0 ? void 0 : d.results) !== null && _a !== void 0 ? _a : d === null || d === void 0 ? void 0 : d.data) !== null && _b !== void 0 ? _b : d === null || d === void 0 ? void 0 : d.tokens) !== null && _c !== void 0 ? _c : []); };
 const dexListFrom = (d) => { var _a, _b; return (Array.isArray(d) ? d : (_b = (_a = d === null || d === void 0 ? void 0 : d.pairs) !== null && _a !== void 0 ? _a : d === null || d === void 0 ? void 0 : d.results) !== null && _b !== void 0 ? _b : []); };
 /** fetch all pages from Jupiter lite (cursor pagination) */
 function fetchAllJupPages(query) {
-    var _a;
     return __awaiter(this, void 0, void 0, function* () {
+        var _a;
         let url = `https://lite-api.jup.ag/tokens/v2/search?query=${encodeURIComponent(query)}`;
         const all = [];
         while (url) {
@@ -29,7 +33,6 @@ function fetchAllJupPages(query) {
             const data = res.data;
             if (Array.isArray(data.results))
                 all.push(...data.results);
-            // some endpoints may return array directly (rare), handled by jupListFrom later
             url = (_a = data.next_url) !== null && _a !== void 0 ? _a : null;
         }
         return all;
@@ -135,9 +138,27 @@ function processCoin(query, solUsdFallback) {
 /** Handler: runs for multiple coins and aggregates results */
 const checkAPI = (_req, res) => __awaiter(void 0, void 0, void 0, function* () {
     var _a, _b, _c, _d, _e, _f, _g, _h, _j;
-    // update this list to the three coins you want to run
-    const coins = ["pepe", "bonk", "dogecoin"];
+    // update this list to the coins you want to run
+    const coins = ["bonk", "dogecoin"];
     try {
+        // ensure redis connection (lazy connect)
+        if (!redisClient.isOpen) {
+            yield redisClient.connect();
+        }
+        // build a cache key per coins array (order matters)
+        const cacheKey = `merged:${coins.join(",")}`;
+        // try to return cached result
+        try {
+            const cached = yield redisClient.get(cacheKey);
+            if (cached) {
+                const parsed = JSON.parse(cached);
+                return res.status(200).json(Object.assign({ fromCache: true }, parsed));
+            }
+        }
+        catch (rcErr) {
+            // don't fail hard on cache read errors; log and continue
+            console.error("Redis GET error:", rcErr);
+        }
         // fetch global CoinGecko SOL price once (fallback)
         const cgResp = yield axios_1.default.get("https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd").catch(() => null);
         const solUsdFallback = (_f = toNum((_c = (_b = (_a = cgResp === null || cgResp === void 0 ? void 0 : cgResp.data) === null || _a === void 0 ? void 0 : _a.solana) === null || _b === void 0 ? void 0 : _b.usd) !== null && _c !== void 0 ? _c : (_e = (_d = cgResp === null || cgResp === void 0 ? void 0 : cgResp.data) === null || _d === void 0 ? void 0 : _d.sol) === null || _e === void 0 ? void 0 : _e.usd)) !== null && _f !== void 0 ? _f : null;
@@ -153,17 +174,24 @@ const checkAPI = (_req, res) => __awaiter(void 0, void 0, void 0, function* () {
                 aggregated.push(...merged.map((item) => (Object.assign(Object.assign({}, item), { _query: query }))));
             }
             else {
-                // record the failure
                 perCoinSummary.push({ query: "unknown", merged_count: 0, error: (_h = (_g = s.reason) === null || _g === void 0 ? void 0 : _g.message) !== null && _h !== void 0 ? _h : String(s.reason) });
             }
         }
-        return res.status(200).json({
-            coins: coins,
+        const payload = {
+            coins,
             sol_price_usd_hint: solUsdFallback,
             total_merged: aggregated.length,
             per_coin: perCoinSummary,
             results: aggregated,
-        });
+        };
+        // cache the payload (best-effort; log errors)
+        try {
+            yield redisClient.setEx(cacheKey, DEFAULT_EXPIRATION, JSON.stringify(payload));
+        }
+        catch (rcErr) {
+            console.error("Redis SETEX error:", rcErr);
+        }
+        return res.status(200).json(payload);
     }
     catch (err) {
         console.error("overall error:", err);

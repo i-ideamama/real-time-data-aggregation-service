@@ -1,5 +1,13 @@
 import axios from "axios";
 import type { Request, Response } from "express";
+import { createClient } from "redis";
+
+
+// use URL here when hosting
+const redisClient = createClient();
+redisClient.on("error", (err) => console.error("Redis Client Error", err));
+
+const DEFAULT_EXPIRATION = 60;
 
 const toNum = (v: any) => (v == null ? null : Number(String(v).replace("%", "")) || null);
 const lc = (s?: string) => (s ? s.toLowerCase() : null);
@@ -15,7 +23,6 @@ async function fetchAllJupPages(query: string) {
     const res = await axios.get(url);
     const data = res.data;
     if (Array.isArray(data.results)) all.push(...data.results);
-    // some endpoints may return array directly (rare), handled by jupListFrom later
     url = data.next_url ?? null;
   }
   return all;
@@ -134,10 +141,30 @@ async function processCoin(query: string, solUsdFallback: number | null) {
 
 /** Handler: runs for multiple coins and aggregates results */
 export const checkAPI = async (_req: Request, res: Response) => {
-  // update this list to the three coins you want to run
-  const coins = ["pepe", "bonk", "dogecoin"];
+  // update this list to the coins you want to run
+  const coins = ["bonk", "dogecoin"];
 
   try {
+    // ensure redis connection (lazy connect)
+    if (!redisClient.isOpen) {
+      await redisClient.connect();
+    }
+
+    // build a cache key per coins array (order matters)
+    const cacheKey = `merged:${coins.join(",")}`;
+
+    // try to return cached result
+    try {
+      const cached = await redisClient.get(cacheKey);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        return res.status(200).json({ fromCache: true, ...parsed });
+      }
+    } catch (rcErr) {
+      // don't fail hard on cache read errors; log and continue
+      console.error("Redis GET error:", rcErr);
+    }
+
     // fetch global CoinGecko SOL price once (fallback)
     const cgResp = await axios.get("https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd").catch(() => null);
     const solUsdFallback = toNum(cgResp?.data?.solana?.usd ?? cgResp?.data?.sol?.usd) ?? null;
@@ -155,18 +182,26 @@ export const checkAPI = async (_req: Request, res: Response) => {
         perCoinSummary.push({ query, merged_count: merged.length, counts, error });
         aggregated.push(...merged.map((item: any) => ({ ...item, _query: query })));
       } else {
-        // record the failure
         perCoinSummary.push({ query: "unknown", merged_count: 0, error: s.reason?.message ?? String(s.reason) });
       }
     }
 
-    return res.status(200).json({
-      coins: coins,
+    const payload = {
+      coins,
       sol_price_usd_hint: solUsdFallback,
       total_merged: aggregated.length,
       per_coin: perCoinSummary,
       results: aggregated,
-    });
+    };
+
+    // cache the payload (best-effort; log errors)
+    try {
+      await redisClient.setEx(cacheKey, DEFAULT_EXPIRATION, JSON.stringify(payload));
+    } catch (rcErr) {
+      console.error("Redis SETEX error:", rcErr);
+    }
+
+    return res.status(200).json(payload);
   } catch (err: any) {
     console.error("overall error:", err);
     return res.status(500).json({ message: "internal error", error: err?.message ?? String(err) });
