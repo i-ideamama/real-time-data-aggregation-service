@@ -4,6 +4,13 @@ import { logger } from './logger';
 
 let redisClient: Redis | null = null;
 
+const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379', {
+  maxRetriesPerRequest: 3,
+  enableReadyCheck: true,
+  // For Render's Redis TLS connection
+  tls: process.env.NODE_ENV === 'production' ? {} : undefined,
+});
+
 export async function initRedis(): Promise<Redis> {
   if (redisClient) return redisClient;
 
@@ -43,3 +50,5 @@ export async function closeRedis(): Promise<void> {
     redisClient = null;
   }
 }
+
+export default redis;

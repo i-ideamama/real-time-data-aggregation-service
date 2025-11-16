@@ -15,7 +15,11 @@ const errorHandler_1 = require("./middleware/errorHandler");
 const tokenRefresh_job_1 = require("./jobs/tokenRefresh.job");
 const getHome_route_1 = tslib_1.__importDefault(require("./routes/getHome.route"));
 const api_routes_1 = tslib_1.__importDefault(require("./routes/api.routes"));
+const PORT = process.env.PORT || 3000;
 const app = (0, express_1.default)();
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Server running on port ${PORT}`);
+});
 const limiter = (0, express_rate_limit_1.default)({
     windowMs: env_1.config.rateLimit.windowMs,
     max: env_1.config.rateLimit.max,
