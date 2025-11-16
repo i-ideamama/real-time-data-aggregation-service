@@ -2,25 +2,97 @@ import axios from "axios";
 import type { Request, Response } from "express";
 import { createClient } from "redis";
 
-
-// use URL here when hosting
+// Redis setup
+// use a URL here when hosting
 const redisClient = createClient();
 redisClient.on("error", (err) => console.error("Redis Client Error", err));
-
 const DEFAULT_EXPIRATION = 60;
 
+// some helpers
 const toNum = (v: any) => (v == null ? null : Number(String(v).replace("%", "")) || null);
 const lc = (s?: string) => (s ? s.toLowerCase() : null);
 
 const jupListFrom = (d: any) => (Array.isArray(d) ? d : d?.results ?? d?.data ?? d?.tokens ?? []);
 const dexListFrom = (d: any) => (Array.isArray(d) ? d : d?.pairs ?? d?.results ?? []);
 
-/** fetch all pages from Jupiter lite (cursor pagination) */
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+
+// generic exponential-backoff wrapper
+async function withBackoff<T>(
+  fn: () => Promise<T>,
+  opts: {
+    maxRetries?: number;
+    baseDelayMs?: number;
+    maxDelayMs?: number;
+    factor?: number;
+    jitter?: boolean;
+    retryOn?: (err: any) => boolean;
+  } = {}
+): Promise<T> {
+  const {
+    maxRetries = 4,
+    baseDelayMs = 200,
+    maxDelayMs = 10000,
+    factor = 2,
+    jitter = true,
+    retryOn = () => true,
+  } = opts;
+
+  let attempt = 0;
+  let lastErr: any = null;
+
+  while (attempt <= maxRetries) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastErr = err;
+      if (!retryOn(err)) throw err;
+      if (attempt === maxRetries) break;
+
+      // compute exponential delay
+      let delay = baseDelayMs * Math.pow(factor, attempt);
+      if (delay > maxDelayMs) delay = maxDelayMs;
+
+      // random jitter
+      if (jitter) {
+        const jitterFactor = 0.25;
+        const rnd = (Math.random() - 0.5) * 2 * jitterFactor; // -j..+j
+        delay = Math.max(0, Math.round(delay * (1 + rnd)));
+      }
+
+      // wait then retry
+      await sleep(delay);
+      attempt++;
+    }
+  }
+
+  // retries exhausted
+  throw lastErr;
+}
+
+// MAIN LOGIC :
+
+// fetch all pages from Jupiter with cursor pagination
 async function fetchAllJupPages(query: string) {
   let url = `https://lite-api.jup.ag/tokens/v2/search?query=${encodeURIComponent(query)}`;
   const all: any[] = [];
   while (url) {
-    const res = await axios.get(url);
+    const res = await withBackoff(() => axios.get(url), {
+      maxRetries: 5,
+      baseDelayMs: 150,
+      factor: 2,
+      maxDelayMs: 5000,
+      jitter: true,
+      retryOn: (err) => {
+        // retry on specific network errors
+        const status = err?.response?.status;
+        if (!status) return true;
+        if (status === 429) return true;
+        if (status >= 500) return true;
+        return false;
+      },
+    });
     const data = res.data;
     if (Array.isArray(data.results)) all.push(...data.results);
     url = data.next_url ?? null;
@@ -28,7 +100,7 @@ async function fetchAllJupPages(query: string) {
   return all;
 }
 
-/** merge one coin's jupList + dexList into the output shape (reuses your logic) */
+// merge one coin's jupList + dexList
 function mergeLists(jList: any[], dList: any[], solUsd: number | null) {
   const map = new Map<string, { j?: any; d?: any }>();
 
@@ -108,12 +180,31 @@ function mergeLists(jList: any[], dList: any[], solUsd: number | null) {
   return results;
 }
 
-/** Process a single coin query: fetch jup pages + dex list, return merged results. */
 async function processCoin(query: string, solUsdFallback: number | null) {
   try {
     const [jList, dexResp] = await Promise.all([
       fetchAllJupPages(query),
-      axios.get(`https://api.dexscreener.com/latest/dex/search?q=${encodeURIComponent(query)}`).then(r => r.data).catch(() => null),
+      // Dexscreener with backoff and same retry policy
+      withBackoff(
+        () =>
+          axios
+            .get(`https://api.dexscreener.com/latest/dex/search?q=${encodeURIComponent(query)}`)
+            .then((r) => r.data),
+        {
+          maxRetries: 4,
+          baseDelayMs: 200,
+          factor: 2,
+          maxDelayMs: 5000,
+          jitter: true,
+          retryOn: (err) => {
+            const status = err?.response?.status;
+            if (!status) return true;
+            if (status === 429) return true;
+            if (status >= 500) return true;
+            return false;
+          },
+        }
+      ).catch(() => null),
     ]);
 
     const dList = dexListFrom(dexResp);
@@ -139,21 +230,15 @@ async function processCoin(query: string, solUsdFallback: number | null) {
   }
 }
 
-/** Handler: runs for multiple coins and aggregates results */
 export const checkAPI = async (_req: Request, res: Response) => {
-  // update this list to the coins you want to run
   const coins = ["bonk", "dogecoin"];
 
   try {
-    // ensure redis connection (lazy connect)
     if (!redisClient.isOpen) {
       await redisClient.connect();
     }
 
-    // build a cache key per coins array (order matters)
     const cacheKey = `merged:${coins.join(",")}`;
-
-    // try to return cached result
     try {
       const cached = await redisClient.get(cacheKey);
       if (cached) {
@@ -161,18 +246,29 @@ export const checkAPI = async (_req: Request, res: Response) => {
         return res.status(200).json({ fromCache: true, ...parsed });
       }
     } catch (rcErr) {
-      // don't fail hard on cache read errors; log and continue
       console.error("Redis GET error:", rcErr);
     }
+    const cgResp = await withBackoff(
+      () => axios.get("https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd"),
+      {
+        maxRetries: 4,
+        baseDelayMs: 200,
+        factor: 2,
+        maxDelayMs: 5000,
+        jitter: true,
+        retryOn: (err) => {
+          const status = err?.response?.status;
+          if (!status) return true;
+          if (status === 429) return true;
+          if (status >= 500) return true;
+          return false;
+        },
+      }
+    ).catch(() => null);
 
-    // fetch global CoinGecko SOL price once (fallback)
-    const cgResp = await axios.get("https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd").catch(() => null);
     const solUsdFallback = toNum(cgResp?.data?.solana?.usd ?? cgResp?.data?.sol?.usd) ?? null;
+    const settled = await Promise.allSettled(coins.map((c) => processCoin(c, solUsdFallback)));
 
-    // process all coins concurrently but safe with Promise.allSettled
-    const settled = await Promise.allSettled(coins.map(c => processCoin(c, solUsdFallback)));
-
-    // collect results (ignore failed ones but include error message)
     const aggregated: any[] = [];
     const perCoinSummary: any[] = [];
 
@@ -194,7 +290,6 @@ export const checkAPI = async (_req: Request, res: Response) => {
       results: aggregated,
     };
 
-    // cache the payload (best-effort; log errors)
     try {
       await redisClient.setEx(cacheKey, DEFAULT_EXPIRATION, JSON.stringify(payload));
     } catch (rcErr) {
