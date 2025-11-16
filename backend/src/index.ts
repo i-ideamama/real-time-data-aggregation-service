@@ -20,11 +20,6 @@ const PORT: number = rawPort ? Number(rawPort) : 3000;
 
 const app = express();
 
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Server running on port ${PORT}`);
-});
-
-
 const limiter = rateLimit({
   windowMs: config.rateLimit.windowMs,
   max: config.rateLimit.max,
