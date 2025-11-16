@@ -1,4 +1,31 @@
 "use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.initSocket = initSocket;
+exports.getIO = getIO;
+const socket_io_1 = require("socket.io");
+let ioInstance = null;
+function initSocket(server) {
+    var _a;
+    if (ioInstance)
+        return ioInstance;
+    const opts = {
+        cors: {
+            origin: (_a = process.env.CORS_ORIGIN) !== null && _a !== void 0 ? _a : '*',
+            methods: ['GET', 'POST'],
+        },
+        serveClient: false,
+    };
+    ioInstance = new socket_io_1.Server(server, opts);
+    ioInstance.on('connection', (socket) => {
+        console.log('[socket] connected', socket.id);
+        socket.on('disconnect', () => console.log('[socket] disconnected', socket.id));
+    });
+    console.info('[socket] server initialized');
+    return ioInstance;
+}
+function getIO() {
+    return ioInstance;
+}
 // import exp from 'constants';
 // import {Server as HTTPServer} from 'http';
 // import {Socket ,Server} from 'socket.io';

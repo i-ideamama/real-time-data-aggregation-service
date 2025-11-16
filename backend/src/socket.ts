@@ -1,3 +1,33 @@
+import { Server, ServerOptions, Socket } from 'socket.io';
+import type http from 'http';
+
+let ioInstance: Server | null = null;
+
+export function initSocket(server: http.Server) {
+  if (ioInstance) return ioInstance;
+
+  const opts = {
+    cors: {
+      origin: process.env.CORS_ORIGIN ?? '*',
+      methods: ['GET', 'POST'],
+    },
+    serveClient: false,
+  } as any;
+
+  ioInstance = new Server(server as any, opts as any);
+
+  ioInstance.on('connection', (socket: Socket) => {
+    console.log('[socket] connected', socket.id);
+    socket.on('disconnect', () => console.log('[socket] disconnected', socket.id));
+  });
+
+  console.info('[socket] server initialized');
+  return ioInstance;
+}
+
+export function getIO(): Server | null {
+  return ioInstance;
+}
 // import exp from 'constants';
 // import {Server as HTTPServer} from 'http';
 // import {Socket ,Server} from 'socket.io';

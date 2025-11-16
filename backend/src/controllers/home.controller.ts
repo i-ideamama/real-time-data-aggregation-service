@@ -1,12 +1,9 @@
 import axios from "axios";
 import type { Request, Response } from "express";
-import { createClient } from "redis";
+import { redisClient } from '../redisClient';
+import { getIO } from '../socket';
 import dotenv from "dotenv";
 dotenv.config();
-// Redis setup
-// use a URL here when hosting
-const redisClient = createClient();
-redisClient.on("error", (err) => console.error("Redis Client Error", err));
 const DEFAULT_EXPIRATION = Number(process.env.REDIS_DEFAULT_EXPIRATION) || 60;
 
 
@@ -233,18 +230,28 @@ async function processCoin(query: string, solUsdFallback: number | null) {
 }
 
 export const checkAPI = async (_req: Request, res: Response) => {
-  const coins = ["bonk", "dogecoin"];
+  const coins = ["meme", "guru"];
 
   try {
-    if (!redisClient.isOpen) {
-      await redisClient.connect();
-    }
+    // redisClient is created/imported from redisClient.ts and connects on import
 
     const cacheKey = `merged:${coins.join(",")}`;
     try {
       const cached = await redisClient.get(cacheKey);
       if (cached) {
         const parsed = JSON.parse(cached);
+        // emit cached payload to connected clients so frontend updates even on cache hits
+        try {
+          const io = getIO();
+          if (io) {
+            console.log('[controller] emitting home:update (cache) to clients');
+            (io as any).emit('home:update', parsed);
+          } else {
+            console.log('[controller] no io instance available (cache)');
+          }
+        } catch (emitErr) {
+          console.error('socket emit error (cache):', emitErr);
+        }
         return res.status(200).json({ fromCache: true, ...parsed });
       }
     } catch (rcErr) {
@@ -294,6 +301,19 @@ export const checkAPI = async (_req: Request, res: Response) => {
 
     try {
       await redisClient.setEx(cacheKey, DEFAULT_EXPIRATION, JSON.stringify(payload));
+
+      // emit socket update to connected clients
+      try {
+        const io = getIO();
+        if (io) {
+          console.log('[controller] emitting home:update (fresh) to clients');
+          (io as any).emit('home:update', payload);
+        } else {
+          console.log('[controller] no io instance available (fresh)');
+        }
+      } catch (emitErr) {
+        console.error('socket emit error', emitErr);
+      }
     } catch (rcErr) {
       console.error("Redis SETEX error:", rcErr);
     }

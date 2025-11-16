@@ -14,13 +14,10 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.checkAPI = void 0;
 const axios_1 = __importDefault(require("axios"));
-const redis_1 = require("redis");
+const redisClient_1 = require("../redisClient");
+const socket_1 = require("../socket");
 const dotenv_1 = __importDefault(require("dotenv"));
 dotenv_1.default.config();
-// Redis setup
-// use a URL here when hosting
-const redisClient = (0, redis_1.createClient)();
-redisClient.on("error", (err) => console.error("Redis Client Error", err));
 const DEFAULT_EXPIRATION = Number(process.env.REDIS_DEFAULT_EXPIRATION) || 60;
 // some helpers
 const toNum = (v) => (v == null ? null : Number(String(v).replace("%", "")) || null);
@@ -216,16 +213,28 @@ function processCoin(query, solUsdFallback) {
 }
 const checkAPI = (_req, res) => __awaiter(void 0, void 0, void 0, function* () {
     var _a, _b, _c, _d, _e, _f, _g, _h, _j;
-    const coins = ["bonk", "dogecoin"];
+    const coins = ["meme", "guru"];
     try {
-        if (!redisClient.isOpen) {
-            yield redisClient.connect();
-        }
+        // redisClient is created/imported from redisClient.ts and connects on import
         const cacheKey = `merged:${coins.join(",")}`;
         try {
-            const cached = yield redisClient.get(cacheKey);
+            const cached = yield redisClient_1.redisClient.get(cacheKey);
             if (cached) {
                 const parsed = JSON.parse(cached);
+                // emit cached payload to connected clients so frontend updates even on cache hits
+                try {
+                    const io = (0, socket_1.getIO)();
+                    if (io) {
+                        console.log('[controller] emitting home:update (cache) to clients');
+                        io.emit('home:update', parsed);
+                    }
+                    else {
+                        console.log('[controller] no io instance available (cache)');
+                    }
+                }
+                catch (emitErr) {
+                    console.error('socket emit error (cache):', emitErr);
+                }
                 return res.status(200).json(Object.assign({ fromCache: true }, parsed));
             }
         }
@@ -272,7 +281,21 @@ const checkAPI = (_req, res) => __awaiter(void 0, void 0, void 0, function* () {
             results: aggregated,
         };
         try {
-            yield redisClient.setEx(cacheKey, DEFAULT_EXPIRATION, JSON.stringify(payload));
+            yield redisClient_1.redisClient.setEx(cacheKey, DEFAULT_EXPIRATION, JSON.stringify(payload));
+            // emit socket update to connected clients
+            try {
+                const io = (0, socket_1.getIO)();
+                if (io) {
+                    console.log('[controller] emitting home:update (fresh) to clients');
+                    io.emit('home:update', payload);
+                }
+                else {
+                    console.log('[controller] no io instance available (fresh)');
+                }
+            }
+            catch (emitErr) {
+                console.error('socket emit error', emitErr);
+            }
         }
         catch (rcErr) {
             console.error("Redis SETEX error:", rcErr);
