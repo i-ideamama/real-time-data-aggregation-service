@@ -15,7 +15,8 @@ const errorHandler_1 = require("./middleware/errorHandler");
 const tokenRefresh_job_1 = require("./jobs/tokenRefresh.job");
 const getHome_route_1 = tslib_1.__importDefault(require("./routes/getHome.route"));
 const api_routes_1 = tslib_1.__importDefault(require("./routes/api.routes"));
-const PORT = process.env.PORT || 3000;
+const rawPort = process.env.PORT;
+const PORT = rawPort ? Number(rawPort) : 3000;
 const app = (0, express_1.default)();
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running on port ${PORT}`);
