@@ -7,7 +7,7 @@ const logger_1 = require("../config/logger");
 const socket_1 = require("../config/socket");
 const getHomePage = (req, res) => tslib_1.__awaiter(void 0, void 0, void 0, function* () {
     try {
-        const { query = 'pepe' } = req.query;
+        const { query = 'meme' } = req.query;
         const result = yield tokenAggregation_service_1.tokenAggregationService.aggregateTokens(String(query));
         try {
             const io = (0, socket_1.getIO)();

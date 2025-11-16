@@ -5,7 +5,7 @@ import { getIO } from '../config/socket';
 
 export const getHomePage = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { query = 'pepe' } = req.query;
+    const { query = 'meme' } = req.query;
     const result = await tokenAggregationService.aggregateTokens(String(query));
 
     try {
