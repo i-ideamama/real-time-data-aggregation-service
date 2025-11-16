@@ -1,3 +1,4 @@
+import { Buffer } from 'buffer';
 import { Token, DexScreenerPair, JupiterToken } from '../types/token';
 import { logger } from '../config/logger';
 
