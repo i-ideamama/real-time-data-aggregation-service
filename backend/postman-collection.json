@@ -1,0 +1,244 @@
+{
+  "info": {
+    "name": "Real-Time Crypto Aggregator",
+    "description": "API collection for crypto data aggregation service",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Health & Status",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/health",
+              "host": ["{{base_url}}"],
+              "path": ["api", "health"]
+            }
+          }
+        },
+        {
+          "name": "Metrics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/metrics",
+              "host": ["{{base_url}}"],
+              "path": ["api", "metrics"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Tokens",
+      "item": [
+        {
+          "name": "Get Tokens - Volume Sort",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/tokens?search=pepe&sortBy=volume&sortOrder=desc&limit=30",
+              "host": ["{{base_url}}"],
+              "path": ["api", "tokens"],
+              "query": [
+                {
+                  "key": "search",
+                  "value": "pepe"
+                },
+                {
+                  "key": "sortBy",
+                  "value": "volume"
+                },
+                {
+                  "key": "sortOrder",
+                  "value": "desc"
+                },
+                {
+                  "key": "limit",
+                  "value": "30"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Tokens - Market Cap Sort",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/tokens?search=doge&sortBy=marketCap&sortOrder=desc&limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["api", "tokens"],
+              "query": [
+                {
+                  "key": "search",
+                  "value": "doge"
+                },
+                {
+                  "key": "sortBy",
+                  "value": "marketCap"
+                },
+                {
+                  "key": "sortOrder",
+                  "value": "desc"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Tokens - Price Change Sort",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/tokens?search=shib&sortBy=priceChange&sortOrder=desc&limit=30",
+              "host": ["{{base_url}}"],
+              "path": ["api", "tokens"],
+              "query": [
+                {
+                  "key": "search",
+                  "value": "shib"
+                },
+                {
+                  "key": "sortBy",
+                  "value": "priceChange"
+                },
+                {
+                  "key": "sortOrder",
+                  "value": "desc"
+                },
+                {
+                  "key": "limit",
+                  "value": "30"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Tokens - With Pagination",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/tokens?search=bonk&sortBy=volume&limit=10&cursor=MTA=",
+              "host": ["{{base_url}}"],
+              "path": ["api", "tokens"],
+              "query": [
+                {
+                  "key": "search",
+                  "value": "bonk"
+                },
+                {
+                  "key": "sortBy",
+                  "value": "volume"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                },
+                {
+                  "key": "cursor",
+                  "value": "MTA="
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Token by Address",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/tokens/{{token_address}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "tokens", "{{token_address}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Home",
+      "item": [
+        {
+          "name": "Get Home Page - Pepe",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/home/page?query=pepe",
+              "host": ["{{base_url}}"],
+              "path": ["home", "page"],
+              "query": [
+                {
+                  "key": "query",
+                  "value": "pepe"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Home Page - Doge",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/home/page?query=doge",
+              "host": ["{{base_url}}"],
+              "path": ["home", "page"],
+              "query": [
+                {
+                  "key": "query",
+                  "value": "doge"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Home Page - Shib",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/home/page?query=shib",
+              "host": ["{{base_url}}"],
+              "path": ["home", "page"],
+              "query": [
+                {
+                  "key": "query",
+                  "value": "shib"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000"
+    },
+    {
+      "key": "token_address",
+      "value": ""
+    }
+  ]
+}
