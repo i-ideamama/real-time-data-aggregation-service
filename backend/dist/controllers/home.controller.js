@@ -15,21 +15,81 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.checkAPI = void 0;
 const axios_1 = __importDefault(require("axios"));
 const redis_1 = require("redis");
+const dotenv_1 = __importDefault(require("dotenv"));
+dotenv_1.default.config();
+// Redis setup
+// use a URL here when hosting
 const redisClient = (0, redis_1.createClient)();
 redisClient.on("error", (err) => console.error("Redis Client Error", err));
-const DEFAULT_EXPIRATION = 60;
+const DEFAULT_EXPIRATION = Number(process.env.REDIS_DEFAULT_EXPIRATION) || 60;
+// some helpers
 const toNum = (v) => (v == null ? null : Number(String(v).replace("%", "")) || null);
 const lc = (s) => (s ? s.toLowerCase() : null);
 const jupListFrom = (d) => { var _a, _b, _c; return (Array.isArray(d) ? d : (_c = (_b = (_a = d === null || d === void 0 ? void 0 : d.results) !== null && _a !== void 0 ? _a : d === null || d === void 0 ? void 0 : d.data) !== null && _b !== void 0 ? _b : d === null || d === void 0 ? void 0 : d.tokens) !== null && _c !== void 0 ? _c : []); };
 const dexListFrom = (d) => { var _a, _b; return (Array.isArray(d) ? d : (_b = (_a = d === null || d === void 0 ? void 0 : d.pairs) !== null && _a !== void 0 ? _a : d === null || d === void 0 ? void 0 : d.results) !== null && _b !== void 0 ? _b : []); };
-/** fetch all pages from Jupiter lite (cursor pagination) */
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+// generic exponential-backoff wrapper
+function withBackoff(fn_1) {
+    return __awaiter(this, arguments, void 0, function* (fn, opts = {}) {
+        const { maxRetries = 4, baseDelayMs = 200, maxDelayMs = 10000, factor = 2, jitter = true, retryOn = () => true, } = opts;
+        let attempt = 0;
+        let lastErr = null;
+        while (attempt <= maxRetries) {
+            try {
+                return yield fn();
+            }
+            catch (err) {
+                lastErr = err;
+                if (!retryOn(err))
+                    throw err;
+                if (attempt === maxRetries)
+                    break;
+                // compute exponential delay
+                let delay = baseDelayMs * Math.pow(factor, attempt);
+                if (delay > maxDelayMs)
+                    delay = maxDelayMs;
+                // random jitter
+                if (jitter) {
+                    const jitterFactor = 0.25;
+                    const rnd = (Math.random() - 0.5) * 2 * jitterFactor; // -j..+j
+                    delay = Math.max(0, Math.round(delay * (1 + rnd)));
+                }
+                // wait then retry
+                yield sleep(delay);
+                attempt++;
+            }
+        }
+        // retries exhausted
+        throw lastErr;
+    });
+}
+// MAIN LOGIC :
+// fetch all pages from Jupiter with cursor pagination
 function fetchAllJupPages(query) {
     return __awaiter(this, void 0, void 0, function* () {
         var _a;
         let url = `https://lite-api.jup.ag/tokens/v2/search?query=${encodeURIComponent(query)}`;
         const all = [];
         while (url) {
-            const res = yield axios_1.default.get(url);
+            const res = yield withBackoff(() => axios_1.default.get(url), {
+                maxRetries: 5,
+                baseDelayMs: 150,
+                factor: 2,
+                maxDelayMs: 5000,
+                jitter: true,
+                retryOn: (err) => {
+                    var _a;
+                    // retry on specific network errors
+                    const status = (_a = err === null || err === void 0 ? void 0 : err.response) === null || _a === void 0 ? void 0 : _a.status;
+                    if (!status)
+                        return true;
+                    if (status === 429)
+                        return true;
+                    if (status >= 500)
+                        return true;
+                    return false;
+                },
+            });
             const data = res.data;
             if (Array.isArray(data.results))
                 all.push(...data.results);
@@ -38,7 +98,7 @@ function fetchAllJupPages(query) {
         return all;
     });
 }
-/** merge one coin's jupList + dexList into the output shape (reuses your logic) */
+// merge one coin's jupList + dexList
 function mergeLists(jList, dList, solUsd) {
     const map = new Map();
     const addDex = (p) => {
@@ -105,14 +165,33 @@ function mergeLists(jList, dList, solUsd) {
     });
     return results;
 }
-/** Process a single coin query: fetch jup pages + dex list, return merged results. */
 function processCoin(query, solUsdFallback) {
     return __awaiter(this, void 0, void 0, function* () {
         var _a, _b, _c;
         try {
             const [jList, dexResp] = yield Promise.all([
                 fetchAllJupPages(query),
-                axios_1.default.get(`https://api.dexscreener.com/latest/dex/search?q=${encodeURIComponent(query)}`).then(r => r.data).catch(() => null),
+                // Dexscreener with backoff and same retry policy
+                withBackoff(() => axios_1.default
+                    .get(`https://api.dexscreener.com/latest/dex/search?q=${encodeURIComponent(query)}`)
+                    .then((r) => r.data), {
+                    maxRetries: 4,
+                    baseDelayMs: 200,
+                    factor: 2,
+                    maxDelayMs: 5000,
+                    jitter: true,
+                    retryOn: (err) => {
+                        var _a;
+                        const status = (_a = err === null || err === void 0 ? void 0 : err.response) === null || _a === void 0 ? void 0 : _a.status;
+                        if (!status)
+                            return true;
+                        if (status === 429)
+                            return true;
+                        if (status >= 500)
+                            return true;
+                        return false;
+                    },
+                }).catch(() => null),
             ]);
             const dList = dexListFrom(dexResp);
             // try to find SOL price in this dex response (helps when coin query returns SOL pairs)
@@ -135,19 +214,14 @@ function processCoin(query, solUsdFallback) {
         }
     });
 }
-/** Handler: runs for multiple coins and aggregates results */
 const checkAPI = (_req, res) => __awaiter(void 0, void 0, void 0, function* () {
     var _a, _b, _c, _d, _e, _f, _g, _h, _j;
-    // update this list to the coins you want to run
     const coins = ["bonk", "dogecoin"];
     try {
-        // ensure redis connection (lazy connect)
         if (!redisClient.isOpen) {
             yield redisClient.connect();
         }
-        // build a cache key per coins array (order matters)
         const cacheKey = `merged:${coins.join(",")}`;
-        // try to return cached result
         try {
             const cached = yield redisClient.get(cacheKey);
             if (cached) {
@@ -156,15 +230,28 @@ const checkAPI = (_req, res) => __awaiter(void 0, void 0, void 0, function* () {
             }
         }
         catch (rcErr) {
-            // don't fail hard on cache read errors; log and continue
             console.error("Redis GET error:", rcErr);
         }
-        // fetch global CoinGecko SOL price once (fallback)
-        const cgResp = yield axios_1.default.get("https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd").catch(() => null);
+        const cgResp = yield withBackoff(() => axios_1.default.get("https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd"), {
+            maxRetries: 4,
+            baseDelayMs: 200,
+            factor: 2,
+            maxDelayMs: 5000,
+            jitter: true,
+            retryOn: (err) => {
+                var _a;
+                const status = (_a = err === null || err === void 0 ? void 0 : err.response) === null || _a === void 0 ? void 0 : _a.status;
+                if (!status)
+                    return true;
+                if (status === 429)
+                    return true;
+                if (status >= 500)
+                    return true;
+                return false;
+            },
+        }).catch(() => null);
         const solUsdFallback = (_f = toNum((_c = (_b = (_a = cgResp === null || cgResp === void 0 ? void 0 : cgResp.data) === null || _a === void 0 ? void 0 : _a.solana) === null || _b === void 0 ? void 0 : _b.usd) !== null && _c !== void 0 ? _c : (_e = (_d = cgResp === null || cgResp === void 0 ? void 0 : cgResp.data) === null || _d === void 0 ? void 0 : _d.sol) === null || _e === void 0 ? void 0 : _e.usd)) !== null && _f !== void 0 ? _f : null;
-        // process all coins concurrently but safe with Promise.allSettled
-        const settled = yield Promise.allSettled(coins.map(c => processCoin(c, solUsdFallback)));
-        // collect results (ignore failed ones but include error message)
+        const settled = yield Promise.allSettled(coins.map((c) => processCoin(c, solUsdFallback)));
         const aggregated = [];
         const perCoinSummary = [];
         for (const s of settled) {
@@ -184,7 +271,6 @@ const checkAPI = (_req, res) => __awaiter(void 0, void 0, void 0, function* () {
             per_coin: perCoinSummary,
             results: aggregated,
         };
-        // cache the payload (best-effort; log errors)
         try {
             yield redisClient.setEx(cacheKey, DEFAULT_EXPIRATION, JSON.stringify(payload));
         }

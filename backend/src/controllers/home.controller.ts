@@ -1,12 +1,14 @@
 import axios from "axios";
 import type { Request, Response } from "express";
 import { createClient } from "redis";
-
+import dotenv from "dotenv";
+dotenv.config();
 // Redis setup
 // use a URL here when hosting
 const redisClient = createClient();
 redisClient.on("error", (err) => console.error("Redis Client Error", err));
-const DEFAULT_EXPIRATION = 60;
+const DEFAULT_EXPIRATION = Number(process.env.REDIS_DEFAULT_EXPIRATION) || 60;
+
 
 // some helpers
 const toNum = (v: any) => (v == null ? null : Number(String(v).replace("%", "")) || null);
