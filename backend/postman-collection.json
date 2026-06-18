@@ -1,0 +1,519 @@
+{
+  "info": {
+    "name": "Real-Time Crypto Aggregator",
+    "description": "API collection for crypto data aggregation service",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Health & Status",
+      "item": [
+        {
+          "name": "Health Check - Happy Path",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/health",
+              "host": ["{{base_url}}"],
+              "path": ["api", "health"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Health check returns 200', function() {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Response is JSON', function() {",
+                  "  pm.response.to.have.header('Content-Type');",
+                  "});",
+                  "pm.test('Response has success flag', function() {",
+                  "  var jsonData = pm.response.json();",
+                  "  pm.expect(jsonData.success).to.be.true;",
+                  "});",
+                  "pm.test('Response has status field', function() {",
+                  "  var jsonData = pm.response.json();",
+                  "  pm.expect(jsonData.status).to.equal('healthy');",
+                  "});",
+                  "pm.test('Response has timestamp', function() {",
+                  "  var jsonData = pm.response.json();",
+                  "  pm.expect(jsonData.timestamp).to.exist;",
+                  "});",
+                  "pm.test('Response has uptime', function() {",
+                  "  var jsonData = pm.response.json();",
+                  "  pm.expect(jsonData.uptime).to.be.a('number');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Metrics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/metrics",
+              "host": ["{{base_url}}"],
+              "path": ["api", "metrics"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Metrics returns 200', function() {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Response contains metrics data', function() {",
+                  "  var jsonData = pm.response.json();",
+                  "  pm.expect(jsonData.success).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Tokens",
+      "item": [
+        {
+          "name": "Get Tokens - Default (Happy Path)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/tokens",
+              "host": ["{{base_url}}"],
+              "path": ["api", "tokens"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Get tokens returns 200', function() {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Response has success flag', function() {",
+                  "  var jsonData = pm.response.json();",
+                  "  pm.expect(jsonData.success).to.be.true;",
+                  "});",
+                  "pm.test('Response contains data array', function() {",
+                  "  var jsonData = pm.response.json();",
+                  "  pm.expect(jsonData.data).to.exist;",
+                  "  pm.expect(jsonData.data.results).to.be.an('array');",
+                  "});",
+                  "pm.test('Response has metadata', function() {",
+                  "  var jsonData = pm.response.json();",
+                  "  pm.expect(jsonData.data.meta).to.exist;",
+                  "  pm.expect(jsonData.data.meta.limit).to.be.a('number');",
+                  "  pm.expect(jsonData.data.meta.total).to.be.a('number');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Tokens - Volume Sort",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/tokens?search=pepe&sortBy=volume&sortOrder=desc&limit=30",
+              "host": ["{{base_url}}"],
+              "path": ["api", "tokens"],
+              "query": [
+                {
+                  "key": "search",
+                  "value": "pepe"
+                },
+                {
+                  "key": "sortBy",
+                  "value": "volume"
+                },
+                {
+                  "key": "sortOrder",
+                  "value": "desc"
+                },
+                {
+                  "key": "limit",
+                  "value": "30"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Volume sort returns 200', function() {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Results are sorted by volume descending', function() {",
+                  "  var jsonData = pm.response.json();",
+                  "  var results = jsonData.data.results;",
+                  "  if(results.length > 1) {",
+                  "    for(let i = 0; i < results.length - 1; i++) {",
+                  "      pm.expect(results[i].volume_24h >= results[i+1].volume_24h);",
+                  "    }",
+                  "  }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Tokens - Market Cap Sort",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/tokens?search=doge&sortBy=marketCap&sortOrder=desc&limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["api", "tokens"],
+              "query": [
+                {
+                  "key": "search",
+                  "value": "doge"
+                },
+                {
+                  "key": "sortBy",
+                  "value": "marketCap"
+                },
+                {
+                  "key": "sortOrder",
+                  "value": "desc"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Tokens - Price Change Sort",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/tokens?search=shib&sortBy=priceChange&sortOrder=asc&limit=30",
+              "host": ["{{base_url}}"],
+              "path": ["api", "tokens"],
+              "query": [
+                {
+                  "key": "search",
+                  "value": "shib"
+                },
+                {
+                  "key": "sortBy",
+                  "value": "priceChange"
+                },
+                {
+                  "key": "sortOrder",
+                  "value": "asc"
+                },
+                {
+                  "key": "limit",
+                  "value": "30"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Tokens - With Pagination",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/tokens?search=bonk&sortBy=volume&limit=10&cursor=MTA=",
+              "host": ["{{base_url}}"],
+              "path": ["api", "tokens"],
+              "query": [
+                {
+                  "key": "search",
+                  "value": "bonk"
+                },
+                {
+                  "key": "sortBy",
+                  "value": "volume"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                },
+                {
+                  "key": "cursor",
+                  "value": "MTA="
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Pagination returns 200', function() {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Pagination metadata is present', function() {",
+                  "  var jsonData = pm.response.json();",
+                  "  pm.expect(jsonData.data.meta.hasMore).to.be.a('boolean');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Tokens - Edge Case: Empty Search",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/tokens?search=&limit=10",
+              "host": ["{{base_url}}"],
+              "path": ["api", "tokens"],
+              "query": [
+                {
+                  "key": "search",
+                  "value": ""
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Tokens - Edge Case: Invalid Limit",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/tokens?search=pepe&limit=0",
+              "host": ["{{base_url}}"],
+              "path": ["api", "tokens"],
+              "query": [
+                {
+                  "key": "search",
+                  "value": "pepe"
+                },
+                {
+                  "key": "limit",
+                  "value": "0"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Tokens - Edge Case: Very High Limit",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/tokens?search=pepe&limit=1000",
+              "host": ["{{base_url}}"],
+              "path": ["api", "tokens"],
+              "query": [
+                {
+                  "key": "search",
+                  "value": "pepe"
+                },
+                {
+                  "key": "limit",
+                  "value": "1000"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Token by Address - Happy Path",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/tokens/{{token_address}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "tokens", "{{token_address}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Get token by address - Status 200 or 404', function() {",
+                  "  pm.response.to.have.status.oneOf([200, 404]);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Token by Address - Invalid Address",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/tokens/invalid-address-12345",
+              "host": ["{{base_url}}"],
+              "path": ["api", "tokens", "invalid-address-12345"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Invalid address returns 404 or 400', function() {",
+                  "  pm.response.to.have.status.oneOf([400, 404, 500]);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Home",
+      "item": [
+        {
+          "name": "Get Home Page - Pepe (Happy Path)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/home/page?query=pepe",
+              "host": ["{{base_url}}"],
+              "path": ["home", "page"],
+              "query": [
+                {
+                  "key": "query",
+                  "value": "pepe"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Home page returns 200', function() {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Response has success flag', function() {",
+                  "  var jsonData = pm.response.json();",
+                  "  pm.expect(jsonData.success).to.be.true;",
+                  "});",
+                  "pm.test('Response contains data', function() {",
+                  "  var jsonData = pm.response.json();",
+                  "  pm.expect(jsonData.data).to.exist;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Home Page - Doge",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/home/page?query=doge",
+              "host": ["{{base_url}}"],
+              "path": ["home", "page"],
+              "query": [
+                {
+                  "key": "query",
+                  "value": "doge"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Home Page - Shib",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/home/page?query=shib",
+              "host": ["{{base_url}}"],
+              "path": ["home", "page"],
+              "query": [
+                {
+                  "key": "query",
+                  "value": "shib"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Home Page - No Query (Default)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/home/page",
+              "host": ["{{base_url}}"],
+              "path": ["home", "page"]
+            }
+          }
+        },
+        {
+          "name": "Get Home Page - Empty Query (Edge Case)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/home/page?query=",
+              "host": ["{{base_url}}"],
+              "path": ["home", "page"],
+              "query": [
+                {
+                  "key": "query",
+                  "value": ""
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:3000"
+    },
+    {
+      "key": "token_address",
+      "value": "EPjFWaLb3odccjf7wMCteKkyQbER5z5z31L2r2uxNXT"
+    }
+  ]
+}

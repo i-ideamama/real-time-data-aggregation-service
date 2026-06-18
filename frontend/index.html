@@ -1,0 +1,840 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-Time Token Aggregator</title>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+            background: linear-gradient(135deg, #0f0f23 0%, #1a1a3f 100%);
+            color: #e0e0e0;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .header-left h1 {
+            font-size: 32px;
+            font-weight: 700;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 5px;
+        }
+
+        .header-left p {
+            font-size: 14px;
+            color: #a0a0a0;
+        }
+
+        .header-right {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+
+        .search-box {
+            display: flex;
+            align-items: center;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            padding: 10px 15px;
+            gap: 10px;
+        }
+
+        .search-box input {
+            background: transparent;
+            border: none;
+            color: #e0e0e0;
+            outline: none;
+            width: 200px;
+            font-size: 14px;
+        }
+
+        .search-box input::placeholder {
+            color: #606080;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border-radius: 6px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: rgba(255, 255, 255, 0.05);
+            color: #e0e0e0;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s ease;
+        }
+
+        .btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .btn-primary {
+            background: #667eea;
+            border-color: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #764ba2;
+            border-color: #764ba2;
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            background: rgba(76, 175, 80, 0.1);
+            border-radius: 6px;
+            border: 1px solid rgba(76, 175, 80, 0.3);
+            font-size: 12px;
+            color: #4caf50;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #4caf50;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0.5;
+            }
+        }
+
+        .table-wrapper {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        thead {
+            background: rgba(255, 255, 255, 0.05);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        th {
+            padding: 16px;
+            text-align: left;
+            font-weight: 600;
+            font-size: 12px;
+            color: #a0a0a0;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        th:hover {
+            color: #e0e0e0;
+        }
+
+        tbody tr {
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            transition: background 0.3s ease;
+        }
+
+        tbody tr:hover {
+            background: rgba(102, 126, 234, 0.1);
+        }
+
+        tbody tr:last-child {
+            border-bottom: none;
+        }
+
+        td {
+            padding: 16px;
+            font-size: 14px;
+        }
+
+        .token-cell {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .token-image {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: rgba(102, 126, 234, 0.2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            font-size: 16px;
+        }
+
+        .token-info h3 {
+            font-size: 14px;
+            font-weight: 600;
+            color: #e0e0e0;
+        }
+
+        .token-info p {
+            font-size: 12px;
+            color: #606080;
+            margin-top: 4px;
+        }
+
+        .number {
+            font-family: 'Monaco', 'Courier New', monospace;
+            font-size: 13px;
+        }
+
+        .positive {
+            color: #4caf50;
+        }
+
+        .negative {
+            color: #f44336;
+        }
+
+        .neutral {
+            color: #a0a0a0;
+        }
+
+        .price-change {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .arrow {
+            font-size: 12px;
+        }
+
+        .buy-btn {
+            padding: 8px 20px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 13px;
+            transition: all 0.3s ease;
+        }
+
+        .buy-btn:hover {
+            background: #764ba2;
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+        }
+
+        .pagination {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            margin-top: 30px;
+            padding-top: 20px;
+        }
+
+        .pagination-btn {
+            padding: 10px 16px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: #e0e0e0;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 14px;
+        }
+
+        .pagination-btn:hover:not(:disabled) {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .pagination-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .pagination-info {
+            color: #a0a0a0;
+            font-size: 13px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #606080;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255, 255, 255, 0.1);
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        .error {
+            background: rgba(244, 67, 54, 0.1);
+            border: 1px solid rgba(244, 67, 54, 0.3);
+            color: #f44336;
+            padding: 16px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .error.show {
+            display: block;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #606080;
+        }
+
+        .empty-state p {
+            font-size: 16px;
+            margin-bottom: 10px;
+        }
+
+        .protocol-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            background: rgba(102, 126, 234, 0.15);
+            border: 1px solid rgba(102, 126, 234, 0.3);
+            border-radius: 4px;
+            font-size: 11px;
+            color: #667eea;
+            font-weight: 500;
+        }
+
+        .filter-row {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            flex-wrap: wrap;
+        }
+
+        .filter-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .filter-group label {
+            font-size: 13px;
+            color: #a0a0a0;
+            font-weight: 500;
+        }
+
+        .filter-group select {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: #e0e0e0;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 13px;
+            cursor: pointer;
+        }
+
+        .filter-group select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        @media (max-width: 1024px) {
+            th, td {
+                padding: 12px 8px;
+                font-size: 12px;
+            }
+
+            .token-image {
+                width: 32px;
+                height: 32px;
+            }
+
+            .token-info h3 {
+                font-size: 12px;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .header {
+                flex-direction: column;
+                gap: 20px;
+                align-items: flex-start;
+            }
+
+            .header-right {
+                width: 100%;
+                flex-direction: column;
+            }
+
+            .search-box {
+                width: 100%;
+            }
+
+            .search-box input {
+                width: 100%;
+            }
+
+            .controls {
+                width: 100%;
+            }
+
+            .filter-row {
+                flex-direction: column;
+            }
+
+            .table-wrapper {
+                overflow-x: auto;
+            }
+
+            table {
+                min-width: 900px;
+            }
+
+            .buy-btn {
+                padding: 6px 12px;
+                font-size: 12px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <div class="header-left">
+                <h1>Trending Tokens</h1>
+                <p>Real-time cryptocurrency data aggregation</p>
+            </div>
+            <div class="header-right">
+                <div class="search-box">
+                    <span>🔍</span>
+                    <input type="text" id="searchInput" placeholder="Search tokens (pepe, doge, shib...)" />
+                </div>
+                <div class="status-indicator">
+                    <div class="status-dot"></div>
+                    <span id="connectionStatus">Connected</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Filters -->
+        <div class="filter-row">
+            <div class="filter-group">
+                <label>Sort By</label>
+                <select id="sortBySelect">
+                    <option value="volume">Volume</option>
+                    <option value="marketCap">Market Cap</option>
+                    <option value="liquidity">Liquidity</option>
+                    <option value="priceChange">Price Change</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label>Order</label>
+                <select id="sortOrderSelect">
+                    <option value="desc">Descending</option>
+                    <option value="asc">Ascending</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label>Limit</label>
+                <select id="limitSelect">
+                    <option value="10">10 Results</option>
+                    <option value="20" selected>20 Results</option>
+                    <option value="50">50 Results</option>
+                    <option value="100">100 Results</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Error Message -->
+        <div id="errorMessage" class="error"></div>
+
+        <!-- Table -->
+        <div class="table-wrapper">
+            <div id="loadingIndicator" class="loading" style="display: none;">
+                <div class="spinner"></div>
+                <p>Loading tokens...</p>
+            </div>
+            <div id="emptyState" class="empty-state" style="display: none;">
+                <p>No tokens found. Try a different search.</p>
+            </div>
+            <table id="tokensTable" style="display: none;">
+                <thead>
+                    <tr>
+                        <th>Pair Info</th>
+                        <th>Market Cap</th>
+                        <th>Liquidity</th>
+                        <th>Volume</th>
+                        <th>Txns</th>
+                        <th>Price Change (1h)</th>
+                        <th>Protocol</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody id="tokensBody">
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Pagination -->
+        <div class="pagination">
+            <button class="pagination-btn" id="prevBtn" disabled>← Previous</button>
+            <span class="pagination-info">
+                <span id="pageInfo">Page 1</span>
+            </span>
+            <button class="pagination-btn" id="nextBtn">Next →</button>
+        </div>
+    </div>
+
+    <script>
+        // Configuration
+        const API_URL = 'http://localhost:8000';
+        const SOCKET_URL = 'http://localhost:8000';
+
+        // State
+        let currentState = {
+            tokens: [],
+            cursor: null,
+            nextCursor: null,
+            search: 'pepe',
+            sortBy: 'volume',
+            sortOrder: 'desc',
+            limit: 20,
+            page: 1,
+            cached: false
+        };
+
+        // Elements
+        const searchInput = document.getElementById('searchInput');
+        const sortBySelect = document.getElementById('sortBySelect');
+        const sortOrderSelect = document.getElementById('sortOrderSelect');
+        const limitSelect = document.getElementById('limitSelect');
+        const tokensTable = document.getElementById('tokensTable');
+        const tokensBody = document.getElementById('tokensBody');
+        const loadingIndicator = document.getElementById('loadingIndicator');
+        const emptyState = document.getElementById('emptyState');
+        const errorMessage = document.getElementById('errorMessage');
+        const prevBtn = document.getElementById('prevBtn');
+        const nextBtn = document.getElementById('nextBtn');
+        const pageInfo = document.getElementById('pageInfo');
+        const connectionStatus = document.getElementById('connectionStatus');
+
+        // Socket.io Connection
+        let socket = null;
+
+        function initSocket() {
+            socket = io(SOCKET_URL, {
+                reconnection: true,
+                reconnectionDelay: 1000,
+                reconnectionDelayMax: 5000,
+                reconnectionAttempts: 5
+            });
+
+            socket.on('connect', () => {
+                updateConnectionStatus(true);
+                console.log('Connected to server');
+            });
+
+            socket.on('disconnect', () => {
+                updateConnectionStatus(false);
+                console.log('Disconnected from server');
+            });
+
+            socket.on('tokensUpdated', (data) => {
+                console.log('Received tokens update:', data);
+                // Optional: You can update tokens in real-time without reloading
+                // For now, we'll keep the current approach of fetching via HTTP
+            });
+
+            socket.on('error', (error) => {
+                console.error('Socket error:', error);
+                updateConnectionStatus(false);
+            });
+        }
+
+        function updateConnectionStatus(connected) {
+            const statusDot = document.querySelector('.status-dot');
+            if (connected) {
+                connectionStatus.textContent = 'Connected';
+                statusDot.style.background = '#4caf50';
+            } else {
+                connectionStatus.textContent = 'Disconnected';
+                statusDot.style.background = '#f44336';
+            }
+        }
+
+        // Format number utility
+        function formatNumber(value) {
+            if (value === null || value === undefined) return 'N/A';
+            if (value === 0) return '0';
+
+            const absValue = Math.abs(value);
+            if (absValue >= 1e9) {
+                return (value / 1e9).toFixed(2) + 'B';
+            }
+            if (absValue >= 1e6) {
+                return (value / 1e6).toFixed(2) + 'M';
+            }
+            if (absValue >= 1e3) {
+                return (value / 1e3).toFixed(2) + 'K';
+            }
+            if (absValue < 0.0001) {
+                return value.toExponential(2);
+            }
+            return value.toFixed(absValue >= 1 ? 2 : 8);
+        }
+
+        // Format change percentage
+        function formatChange(value) {
+            if (value === null || value === undefined) return 'N/A';
+            const symbol = value >= 0 ? '↑' : '↓';
+            const className = value >= 0 ? 'positive' : 'negative';
+            return `<span class="price-change"><span class="arrow">${symbol}</span><span class="${className}">${Math.abs(value).toFixed(2)}%</span></span>`;
+        }
+
+        // Fetch tokens
+        async function fetchTokens(cursor = null) {
+            try {
+                showLoadingIndicator(true);
+                hideErrorMessage();
+
+                const params = new URLSearchParams({
+                    search: currentState.search,
+                    sortBy: currentState.sortBy,
+                    sortOrder: currentState.sortOrder,
+                    limit: currentState.limit,
+                    ...(cursor && { cursor })
+                });
+
+                const response = await fetch(`${API_URL}/api/tokens?${params}`);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+                const data = await response.json();
+                if (!data.success) throw new Error(data.message || 'Failed to fetch tokens');
+
+                currentState.tokens = data.data.results;
+                currentState.nextCursor = data.data.meta.nextCursor;
+                currentState.cached = data.data.cached;
+
+                renderTokens();
+                updatePagination();
+            } catch (error) {
+                console.error('Fetch error:', error);
+                showErrorMessage(`Failed to load tokens: ${error.message}`);
+                showEmptyState(true);
+            } finally {
+                showLoadingIndicator(false);
+            }
+        }
+
+        // Render tokens table
+        function renderTokens() {
+            if (currentState.tokens.length === 0) {
+                showEmptyState(true);
+                tokensTable.style.display = 'none';
+                return;
+            }
+
+            showEmptyState(false);
+            tokensTable.style.display = 'table';
+            tokensBody.innerHTML = '';
+
+            currentState.tokens.forEach(token => {
+                const row = createTokenRow(token);
+                tokensBody.appendChild(row);
+            });
+        }
+
+        // Create token row
+        function createTokenRow(token) {
+            const row = document.createElement('tr');
+            const tokenImage = token.token_ticker.charAt(0).toUpperCase();
+
+            row.innerHTML = `
+                <td>
+                    <div class="token-cell">
+                        <div class="token-image">${tokenImage}</div>
+                        <div class="token-info">
+                            <h3>${token.token_name}</h3>
+                            <p>${token.token_ticker} • ${token.token_address.substring(0, 8)}...</p>
+                        </div>
+                    </div>
+                </td>
+                <td>
+                    <div class="number">
+                        ${token.market_cap_usd ? '$' + formatNumber(token.market_cap_usd) : 'N/A'}
+                    </div>
+                </td>
+                <td>
+                    <div class="number">
+                        ${token.liquidity_usd ? '$' + formatNumber(token.liquidity_usd) : 'N/A'}
+                    </div>
+                </td>
+                <td>
+                    <div class="number">
+                        ${token.volume_usd ? '$' + formatNumber(token.volume_usd) : 'N/A'}
+                    </div>
+                </td>
+                <td>
+                    <div class="number">${token.transaction_count || 'N/A'}</div>
+                </td>
+                <td>
+                    ${token.price_1hr_change !== null ? formatChange(token.price_1hr_change) : '<span class="neutral">N/A</span>'}
+                </td>
+                <td>
+                    <span class="protocol-badge">${token.protocol || 'Unknown'}</span>
+                </td>
+                <td>
+                    <button class="buy-btn" onclick="window.open('https://dexscreener.com/solana/${token.token_address}', '_blank')">
+                        View
+                    </button>
+                </td>
+            `;
+
+            return row;
+        }
+
+        // Update pagination
+        function updatePagination() {
+            prevBtn.disabled = currentState.page === 1;
+            nextBtn.disabled = !currentState.nextCursor;
+            pageInfo.textContent = `Showing ${currentState.tokens.length} tokens • Page ${currentState.page}`;
+        }
+
+        // Event listeners
+        searchInput.addEventListener('input', (e) => {
+            currentState.search = e.target.value || 'pepe';
+            currentState.page = 1;
+            currentState.cursor = null;
+            fetchTokens();
+        });
+
+        sortBySelect.addEventListener('change', (e) => {
+            currentState.sortBy = e.target.value;
+            currentState.page = 1;
+            currentState.cursor = null;
+            fetchTokens();
+        });
+
+        sortOrderSelect.addEventListener('change', (e) => {
+            currentState.sortOrder = e.target.value;
+            currentState.page = 1;
+            currentState.cursor = null;
+            fetchTokens();
+        });
+
+        limitSelect.addEventListener('change', (e) => {
+            currentState.limit = parseInt(e.target.value);
+            currentState.page = 1;
+            currentState.cursor = null;
+            fetchTokens();
+        });
+
+        prevBtn.addEventListener('click', () => {
+            if (currentState.page > 1) {
+                // Note: For true pagination, you'd need to store previous cursors
+                currentState.page--;
+                fetchTokens();
+            }
+        });
+
+        nextBtn.addEventListener('click', () => {
+            if (currentState.nextCursor) {
+                currentState.page++;
+                fetchTokens(currentState.nextCursor);
+            }
+        });
+
+        // UI Helpers
+        function showLoadingIndicator(show) {
+            loadingIndicator.style.display = show ? 'block' : 'none';
+        }
+
+        function showEmptyState(show) {
+            emptyState.style.display = show ? 'block' : 'none';
+        }
+
+        function showErrorMessage(message) {
+            errorMessage.textContent = message;
+            errorMessage.classList.add('show');
+            setTimeout(() => {
+                errorMessage.classList.remove('show');
+            }, 5000);
+        }
+
+        function hideErrorMessage() {
+            errorMessage.classList.remove('show');
+        }
+
+        // Initialize
+        function init() {
+            initSocket();
+            fetchTokens();
+        }
+
+        // Start on page load
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>

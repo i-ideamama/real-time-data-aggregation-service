@@ -1,10 +1,9 @@
 "use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
-const express_1 = __importDefault(require("express"));
+const tslib_1 = require("tslib");
+const express_1 = tslib_1.__importDefault(require("express"));
 const home_controller_1 = require("../controllers/home.controller");
+const errorHandler_1 = require("../middleware/errorHandler");
 const router = express_1.default.Router();
-router.get("/getHomePage", home_controller_1.checkAPI);
+router.get('/page', (0, errorHandler_1.asyncHandler)(home_controller_1.getHomePage));
 exports.default = router;

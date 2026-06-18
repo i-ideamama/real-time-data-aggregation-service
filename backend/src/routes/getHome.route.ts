@@ -1,8 +1,10 @@
-import express from "express";
-import {checkAPI} from "../controllers/home.controller";
+import express from 'express';
+import { getHomePage } from '../controllers/home.controller';
+import { asyncHandler } from '../middleware/errorHandler';
 
-const router=express.Router();
+const router = express.Router();
 
-router.get("/getHomePage",checkAPI);
+router.get('/page', asyncHandler(getHomePage));
 
 export default router;
+
